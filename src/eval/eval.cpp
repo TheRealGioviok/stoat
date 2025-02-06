@@ -28,6 +28,8 @@ namespace stoat::eval {
     namespace {
         constexpr Score kKingRingPieceScale = 8;
         constexpr Score kRooksForwardMobilityBonus = 20;
+        constexpr Score kLinearHandCountMalus = -15;
+        constexpr Score kSecondOrderHandCountMalus = -10;
 
         [[nodiscard]] Score evalMaterial(const Position& pos, Color c) {
             const auto materialCount = [&](PieceType pt) {
@@ -58,7 +60,7 @@ namespace stoat::eval {
             }
 
             const auto handPieceValue = [&](PieceType pt) {
-                return static_cast<i32>(hand.count(pt)) * pieceValue(pt) * 17 / 16;
+                return static_cast<i32>(hand.count(pt)) * pieceValue(pt) * 18 / 16;
             };
 
             score += handPieceValue(PieceTypes::kPawn);
@@ -97,6 +99,24 @@ namespace stoat::eval {
 
             return forwardMobility * kRooksForwardMobilityBonus;
         }
+
+        [[nodiscard]] Score evalHandPower(const Position& pos, Color stm){
+            const auto handCount = [&](const Hand& hand) {
+                return static_cast<i32>(
+                    + hand.count(PieceTypes::kPawn)
+                    + hand.count(PieceTypes::kLance)
+                    + hand.count(PieceTypes::kKnight)
+                    + hand.count(PieceTypes::kSilver)
+                    + hand.count(PieceTypes::kGold)
+                    + hand.count(PieceTypes::kBishop)
+                    + hand.count(PieceTypes::kRook)
+                );
+            };
+
+            const i32 countDiff = handCount(pos.hand(stm)) - handCount(pos.hand(stm.flip()));
+
+            return countDiff * kLinearHandCountMalus + countDiff * countDiff * kSecondOrderHandCountMalus; 
+        }
     } // namespace
 
     Score staticEval(const Position& pos) {
@@ -108,6 +128,8 @@ namespace stoat::eval {
         score += evalMaterial(pos, stm) - evalMaterial(pos, nstm);
         score += evalKingSafety(pos, stm) - evalKingSafety(pos, nstm);
         score += evalRook(pos, stm) - evalRook(pos, nstm);
+
+        score += evalHandPower(pos, stm);
 
         return std::clamp(score, -kScoreWin + 1, kScoreWin - 1);
     }
